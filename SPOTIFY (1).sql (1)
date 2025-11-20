@@ -1,0 +1,248 @@
+
+
+-- EDA
+
+select count(*) from spotify;
+ -- 20594
+
+SELECT COUNT(DISTINCT album) FROM spotify;
+-- 11854
+
+SELECT COUNT(DISTINCT artist) FROM spotify;
+--2074
+
+SELECT COUNT(DISTINCT channel) FROM spotify;
+--6673
+
+SELECT DISTINCT album_type FROM spotify;
+-- "album" , "compilation" , "single"
+SELECT DISTINCT 
+	album_type,
+	AVG(stream) as avg_stream
+FROM spotify
+GROUP BY album_type
+ORDER BY 2 DESC; 
+
+/*  1)"album"	      146821436.9737729
+	2)"single"	      98961865.93042429
+	3)"compilation"	  78315546.3202033 */
+
+SELECT MAX(duration_min) FROM spotify;
+-- 77.93 min
+
+SELECT MIN(duration_min) FROM spotify;
+-- 0 min lets find those songs and remove it
+
+SELECT * FROM spotify
+	WHERE duration_min = 0;
+-- 2 songs are there with 0 min duration
+-- deleting those 2 songs
+DELETE FROM spotify
+	WHERE duration_min = 0
+-- there is no song left with 0 time duration
+
+SELECT COUNT(*) FROM spotify;
+-- 20592 count is reduced ,2 songs are removed 
+
+SELECT 
+	most_played_on ,
+	COUNT(duration_min) 
+FROM spotify
+	GROUP BY most_played_on;
+-- "Youtube" = 4900, "Spotify" = 15692
+
+select * from spotify 
+order by stream desc
+limit 5
+-- #Top 5 artists "The Weeknd","Ed Sheeran","Lewis Capaldi","Post Malone","Swae Lee" 
+-- #top 5 channels "Ed Sheeran","LewisCapaldiVEVO","PostMaloneVEVO","PostMaloneVEVO","PostMaloneVEVO"
+/* Top 5 songs
+"The Weeknd - Blinding Lights (Official Video)",
+"Ed Sheeran - Shape of You (Official Music Video)",
+ "Lewis Capaldi - Someone You Loved",
+ "Post Malone ft. 21 Savage - rockstar (Official Music Video)",
+ "Post Malone, Swae Lee - Sunflower (Spider-Man: Into the Spider-Verse)" */
+-- ----------------------------------
+-- Data Analysis -- Easy Category 
+-- ----------------------------------
+
+-- 1) Retrive the names of all tracks that have more than 1 billion stram 
+SELECT * FROM spotify
+	WHERE stream > 1000000000;
+	-- 385 songs are there more than 1 billion 
+
+-- 2) List all albums along with their respective artists
+SELECT 
+	DISTINCT album,
+	artist
+FROM spotify
+ORDER BY 1;
+
+-- 3) Get the all the number of comments for tracks where liecenced = True 
+SELECT 
+	SUM(comments) as total_comments 
+FROM spotify
+	WHERE licensed = 'TRUE';
+	-- total number of comments is  497015695 
+
+-- 4) Find all tracks that belong to the album type single 
+SELECT 
+	*
+FROM spotify
+WHERE 
+	album_type = 'single';
+	-- there are total 4973 songs are there 
+
+-- 5) Count the total number of tracksk by each artist
+SELECT 
+	artist,
+	COUNT(*) as total_no_songs
+FROM spotify
+GROUP BY artist
+ORDER BY 2 
+
+-- ----------------------------
+-- MEDIUM LEVEL 
+-- ----------------------------
+-- 6) Calculate the avarage densibility of tracks in each album 
+SELECT
+	album,
+	AVG(danceability) as avg_denceability
+FROM spotify
+GROUP BY album
+ORDER BY 2 DESC 
+
+-- 7) Find the top 5 tracks with the highest energy values 
+SELECT 
+	track,
+	MAX(energy) 
+FROM spotify 
+GROUP BY 1
+ORDER BY 2 DESC
+LIMIT 5
+
+-- 8)List all the tracks along with their views and likes where official_video = TRUE
+
+SELECT 
+	track,
+	SUM(likes) as total_likes,
+	SUM(views) as total_views
+FROM spotify 
+WHERE official_video = 'true'
+GROUP BY 1
+ORDER BY 3 DESC
+LIMIT 5
+
+-- 9) For each album,calculate the total views of all associateed tracks 
+SELECT
+	 album, 
+	 track,
+	 SUM(views)
+FROM spotify
+GROUP BY 1,2
+ORDER BY 3 DESC
+
+-- 10) Retrive all the tracks names that have been streamed on spotify more than youtube
+SELECT * FROM 
+(SELECT 
+	track,
+	COALESCE(SUM(CASE WHEN most_played_on = 'Spotify' THEN stream END),0) AS streamed_on_spotify,
+	COALESCE(SUM(CASE WHEN most_played_on = 'Youtube' THEN stream END),0) AS streamed_on_youtube
+FROM spotify
+GROUP BY track 
+) AS t1
+WHERE 
+	streamed_on_spotify > streamed_on_youtube 
+	AND
+	streamed_on_youtube <> 0
+
+-- 11) Find the top 3 most viewed most viewed tracks for each artist using winow functions
+WITH ranking_artist
+AS
+(SELECT 
+	artist , 
+	track ,
+	SUM(views) AS total_views,
+	DENSE_RANK() OVER(PARTITION BY artist ORDER BY SUM(views) DESC) AS rank_
+FROM spotify
+GROUP BY artist , track
+)
+SELECT * FROM ranking_artist
+WHERE rank_ <= 3;
+
+-- 12)Write query to find the track where the livenes score is greater than avarage
+
+SELECT 
+	track,
+	artist,
+	liveness
+FROM spotify 
+WHERE 
+	liveness > (SELECT AVG(liveness) FROM spotify);  -- sub query 
+
+-- 13)Use a with clause to calculate the difference between highest and lowest energy values for 
+-- tracks in each album 
+WITH cte
+AS
+(SELECT 
+	album,
+	MAX(energy) AS max_value,
+	MIN(energy) as min_value
+FROM spotify
+GROUP BY 1
+)
+SELECT 
+	album,
+	(max_value - min_value) AS energy_diff
+FROM cte
+ORDER BY 2 DESC
+
+-- 14) find the tracks where the energy-to-liveness ratio greater than is 1.2
+WITH cte AS(
+SELECT 
+	track,
+	SUM(energy) AS total_energy,
+	SUM(liveness) AS total_liveness
+FROM spotify
+GROUP BY 1)
+SELECT * , 
+	(total_energy / total_liveness) AS eng_live_ratio  
+FROM cte 
+WHERE (total_energy / total_liveness) > 1.2
+
+-- 15)valculate the cumilative sum of likes for tracks order by number of views , using window functions 
+SELECT 
+	track,
+	SUM(likes) OVER(partition by track ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as cumulative_likes
+from spotify
+
+with cte as (
+select * from spotify 
+order by views desc
+limit 50)
+select avg(danceability),avg(energy),avg(tempo),avg(loudness),avg(speechiness) from cte
+ -- 0.714 , o.70 , 113.76 , -5.23 , 0.09
+with cte as ( 
+select * from spotify
+order by views desc
+limit 50 offset 20450
+)select avg(danceability),avg(energy),avg(tempo),avg(loudness),avg(speechiness) from cte
+-- 0.57 , o.59 ,121.5 ,-10.23 ,0.132
+
+with cte as (
+select * from spotify 
+order by stream desc
+limit 50)
+select avg(danceability),avg(energy),avg(tempo),avg(loudness),avg(speechiness) from cte
+-- 0.65054	0.5789400000000002	118.17344000000004	-6.214360000000003	0.08829600000000001
+
+with cte as (
+select * from spotify 
+order by stream desc
+limit 50 offset 20450)
+select avg(danceability),avg(energy),avg(tempo),avg(loudness),avg(speechiness) from cte
+-- 0.7146600000000001	0.706378	113.7696	-5.248019999999998	0.09323000000000001
+
+
+
+select energy / liveness from spotify;
